@@ -58,18 +58,56 @@ The algorithm is designed specifically for the CVRP, where multiple vehicles mus
 cvrp-oam-project/
 ├── README.md                          # Main documentation
 ├── ALGORITHM.md                       # Detailed algorithm explanation
-├── USAGE.md                           # Usage guide & examples
 ├── API.md                             # API documentation
+├── USAGE.md                           # Usage guide & examples
+├── INSTALLATION.md                    # Setup instructions
+├── QUICK_REFERENCE.md                 # Cheat sheet
+├── GA_IMPLEMENTATION.md               # GA deep dive
+├── TABU_SEARCH_IMPLEMENTATION.md      # TS deep dive
+├── HYBRID_GA_TABU_GUIDE.md            # Integration guide
+├── WEBAPP_GUIDE.md                    # Web app documentation
 ├── oam_project_dataset1.ipynb         # Main Jupyter notebook
+├── app.py                             # Streamlit web app (interactive)
 ├── 19MDVRP Problem Sets.xlsx          # MDRP dataset (Problem 7)
+├── requirements.txt                   # Python dependencies
+├── .gitignore                         # Git ignore rules
 └── .git/                              # Git repository
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Python 3.7+
-- Required packages: `numpy`, `pandas`, `openpyxl`, `matplotlib`
+### Fastest Way: Web App (No Coding!)
+
+```bash
+# 1. Install Streamlit
+pip install streamlit
+
+# 2. Run the app
+streamlit run app.py
+
+# 3. Open browser at http://localhost:8501
+# 4. Adjust parameters and click "Run Optimization"
+```
+
+**Web app includes:**
+- Interactive parameter controls
+- Real-time optimization progress
+- Visual convergence plots
+- Detailed route breakdown
+- CSV export
+
+See [WEBAPP_GUIDE.md](WEBAPP_GUIDE.md) for full web app documentation.
+
+### Alternative: Jupyter Notebook
+
+```bash
+# Open interactive notebook
+jupyter notebook oam_project_dataset1.ipynb
+```
+
+### Alternative: Python Script
+
+See "Usage Examples" section below for code examples.
 
 ### Installation
 
@@ -78,11 +116,70 @@ cvrp-oam-project/
 git clone https://github.com/jyotsana277/cvrp-oam-project.git
 cd cvrp-oam-project
 
-# Install dependencies
+# Install dependencies (all packages)
+pip install -r requirements.txt
+
+# Or install only core packages
 pip install numpy pandas openpyxl matplotlib
+
+# For web app support, also install:
+pip install streamlit
 ```
 
-### Basic Usage
+### Required Packages
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `numpy` | ≥1.19.0 | Numerical computations |
+| `pandas` | ≥1.1.0 | Data manipulation |
+| `openpyxl` | ≥3.0.0 | Excel file reading |
+| `matplotlib` | ≥3.3.0 | Visualization |
+| `streamlit` | ≥1.28.0 | Web app framework (optional) |
+| `jupyter` | ≥1.0.0 | Notebook environment (optional) |
+
+### Two Ways to Use
+
+#### Option 1: Interactive Web App (Recommended for Users)
+
+```bash
+# Install Streamlit
+pip install streamlit
+
+# Run the web app
+streamlit run app.py
+```
+
+The app opens at `http://localhost:8501` with:
+- 🎛️ **Live Configuration Panel**: Adjust parameters in real-time
+- 📊 **Interactive Dashboard**: View results instantly
+- 🛣️ **Route Visualization**: Expandable route details
+- 💾 **CSV Export**: Download optimized routes
+
+**Features:**
+- No coding required
+- Visual parameter controls
+- Real-time progress tracking
+- One-click result export
+
+See [WEBAPP_GUIDE.md](WEBAPP_GUIDE.md) for detailed instructions.
+
+#### Option 2: Jupyter Notebook (For Development/Analysis)
+
+```bash
+# Install Jupyter
+pip install jupyter
+
+# Run notebook
+jupyter notebook oam_project_dataset1.ipynb
+```
+
+Execute cells in order to:
+- Load and explore data
+- Run individual algorithm components
+- Analyze convergence step-by-step
+- Customize advanced parameters
+
+#### Option 3: Python Script (For Batch Processing)
 
 ```python
 from oam_project_dataset1 import HybridGATS, load_mdrp_format, compute_distance_matrix
@@ -237,6 +334,38 @@ FOR each GA generation:
 
 ## 📊 Results & Analysis
 
+### Interactive Web Dashboard
+
+The **Streamlit web app** (`app.py`) provides an interactive interface:
+
+```
+Main Features:
+├── 🎛️ Configuration Panel (Sidebar)
+│   ├── GA parameters (population, generations)
+│   ├── TS parameters (iterations, tenure)
+│   ├── Operator tuning (crossover, mutation)
+│   └── Problem selection
+│
+├── 📈 Real-time Visualization
+│   ├── Convergence plot (GA, TS, Overall)
+│   ├── Performance metrics (distance, routes, improvement %)
+│   └── Live progress bar
+│
+├── 🛣️ Route Details
+│   ├── Expandable route cards
+│   ├── Load information
+│   └── Distance breakdown
+│
+└── 💾 Export Options
+    └── Download routes as CSV
+```
+
+**Example Dashboard Output:**
+- Problem: 100 customers
+- Best Distance: 2,980.45
+- Routes: 8
+- Improvement: 3.2%
+
 ### Output Format
 ```python
 {
@@ -309,29 +438,22 @@ hybrid.run(
 - O(p × n) for population
 - O(n) for best solution tracking
 
-## 🎓 Algorithm Details
+## 📚 Documentation
 
-See [ALGORITHM.md](ALGORITHM.md) for:
-- Detailed mathematical formulation
-- Pseudocode for each component
-- Complexity analysis
-- Convergence properties
+### Getting Started
+- **[WEBAPP_GUIDE.md](WEBAPP_GUIDE.md)** - Interactive web app guide (recommended for new users)
+- **[INSTALLATION.md](INSTALLATION.md)** - Detailed setup instructions
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick help & command cheat sheet
 
-## 💡 Usage Examples
+### Algorithm Details
+- **[ALGORITHM.md](ALGORITHM.md)** - Complete algorithm formulation and pseudocode
+- **[GA_IMPLEMENTATION.md](GA_IMPLEMENTATION.md)** - Genetic Algorithm deep dive
+- **[TABU_SEARCH_IMPLEMENTATION.md](TABU_SEARCH_IMPLEMENTATION.md)** - Tabu Search deep dive
+- **[HYBRID_GA_TABU_GUIDE.md](HYBRID_GA_TABU_GUIDE.md)** - Integration strategy & tuning
 
-See [USAGE.md](USAGE.md) for:
-- Step-by-step tutorials
-- Different problem sizes
-- Custom configurations
-- Result interpretation
-
-## 🔌 API Reference
-
-See [API.md](API.md) for:
-- Complete method documentation
-- Parameter descriptions
-- Return value specifications
-- Example code snippets
+### API & Usage
+- **[API.md](API.md)** - Complete API reference with code examples
+- **[USAGE.md](USAGE.md)** - Usage tutorials and examples
 
 ## 🧪 Testing
 
