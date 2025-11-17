@@ -499,9 +499,9 @@ Run the notebook cells in order:
 
 ## 👥 Contributors
 
-- **Person A**: Data loading and preprocessing
-- **Person B**: Route feasibility and distance calculation
-- **Person C**: Tabu Search implementation
+- **Jyotsana S**: Data loading and preprocessing
+- **Raihan Naeem**: Route feasibility and distance calculation
+- **Rhrishi R G**: Tabu Search implementation
 - **Current**: Genetic Algorithm + Hybrid pipeline integration
 
 ## 📄 License
