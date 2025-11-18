@@ -254,14 +254,15 @@ class TabuSearch:
         return load <= self.capacity
     
     def generate_neighborhood(self, routes):
-        """Generate neighbor solutions"""
+        """Generate neighbor solutions with inter-route and intra-route moves"""
         neighbors = []
         
+        # Inter-route relocations
         for from_route_idx in range(len(routes)):
             route = routes[from_route_idx]
             customers_in_route = route[1:-1]
             
-            if not customers_in_route:
+            if len(customers_in_route) <= 1:  # Keep at least one customer in route
                 continue
             
             for cust_pos, cust in enumerate(customers_in_route):
@@ -274,21 +275,35 @@ class TabuSearch:
                     for insert_pos in range(1, len(to_route)):
                         new_routes = [r.copy() for r in routes]
                         cust_actual_pos = cust_pos + 1
-                        new_routes[from_route_idx].pop(cust_actual_pos)
+                        removed_cust = new_routes[from_route_idx].pop(cust_actual_pos)
+                        new_routes[to_route_idx].insert(insert_pos, removed_cust)
                         
-                        if len(new_routes[from_route_idx]) <= 2:
-                            continue
-                        
-                        new_routes[to_route_idx].insert(insert_pos, cust)
-                        
-                        if self.is_route_feasible(new_routes[to_route_idx]):
-                            move = (from_route_idx, cust_pos, to_route_idx, insert_pos)
+                        # Both routes must remain feasible
+                        if (self.is_route_feasible(new_routes[from_route_idx]) and 
+                            self.is_route_feasible(new_routes[to_route_idx])):
+                            move = ('relocate', from_route_idx, cust_pos, to_route_idx, insert_pos)
                             neighbors.append((new_routes, move))
+        
+        # Intra-route 2-opt moves for each route
+        for route_idx in range(len(routes)):
+            route = routes[route_idx]
+            customers = route[1:-1]
+            
+            if len(customers) < 2:
+                continue
+            
+            for i in range(len(customers)):
+                for j in range(i + 2, len(customers)):
+                    new_routes = [r.copy() for r in routes]
+                    # Reverse segment between i and j
+                    new_routes[route_idx][i+1:j+2] = reversed(new_routes[route_idx][i+1:j+2])
+                    move = ('2opt', route_idx, i, j)
+                    neighbors.append((new_routes, move))
         
         return neighbors
     
     def refine_solution(self, routes, iterations=20):
-        """Apply Tabu Search refinement"""
+        """Apply Tabu Search refinement with aspiration criteria"""
         current_routes = [r.copy() for r in routes]
         current_distance = self.calculate_routes_distance(current_routes)
         
@@ -296,6 +311,7 @@ class TabuSearch:
         best_distance = current_distance
         
         self.tabu_list.clear()
+        no_improvement_count = 0
         
         for iteration in range(iterations):
             neighbors = self.generate_neighborhood(current_routes)
@@ -303,6 +319,7 @@ class TabuSearch:
             if not neighbors:
                 break
             
+            # Age tabu list
             self.tabu_list = {move: tenure - 1 for move, tenure in self.tabu_list.items() if tenure > 1}
             
             best_neighbor_routes = None
@@ -313,6 +330,7 @@ class TabuSearch:
                 neighbor_distance = self.calculate_routes_distance(neighbor_routes)
                 is_tabu = move in self.tabu_list
                 
+                # Aspiration criteria: accept tabu move if it's better than best known
                 if is_tabu and neighbor_distance < best_distance:
                     is_tabu = False
                 
@@ -322,7 +340,10 @@ class TabuSearch:
                     best_neighbor_move = move
             
             if best_neighbor_routes is None:
-                break
+                no_improvement_count += 1
+                if no_improvement_count > 3:  # Early stopping if stuck
+                    break
+                continue
             
             current_routes = best_neighbor_routes
             current_distance = best_neighbor_distance
@@ -333,6 +354,9 @@ class TabuSearch:
             if current_distance < best_distance:
                 best_distance = current_distance
                 best_routes = [r.copy() for r in current_routes]
+                no_improvement_count = 0
+            else:
+                no_improvement_count += 1
         
         return best_routes, best_distance
 
@@ -410,6 +434,92 @@ class HybridGATS:
 
 
 # ============================================================================
+# DISPLAY RESULTS FUNCTION
+# ============================================================================
+
+def display_results(best_routes, best_distance, history, dist_matrix, demands, 
+                   vehicle_capacity, algo_name, show_hybrid_plot=True):
+    """Display optimization results with plots and details"""
+    
+    # Display results
+    st.markdown("### 📈 Results")
+    
+    result_col1, result_col2, result_col3 = st.columns(3)
+    with result_col1:
+        st.metric("Best Distance", f"{best_distance:.2f}")
+    with result_col2:
+        st.metric("Number of Routes", len(best_routes))
+    with result_col3:
+        improvement = ((history['overall_best'][0] - best_distance) / history['overall_best'][0]) * 100
+        st.metric("Improvement", f"{improvement:.1f}%")
+    
+    # Convergence plot
+    st.markdown("### 📊 Convergence Analysis")
+    
+    fig, ax = plt.subplots(figsize=(12, 5))
+    
+    if show_hybrid_plot:
+        ax.plot(history['gen'], history['ga_best'], marker='o', label='GA Best', linewidth=2)
+        ax.plot(history['gen'], history['ts_best'], marker='s', label='TS Refined', linewidth=2)
+        ax.plot(history['gen'], history['overall_best'], marker='^', label='Overall Best', 
+               linewidth=2.5, color='red')
+        title = f'{algo_name} Convergence'
+    else:
+        ax.plot(history['gen'], history['overall_best'], marker='o', label=f'{algo_name} Best', 
+               linewidth=2.5, color='blue')
+        title = f'{algo_name} Convergence'
+    
+    ax.set_xlabel('Generation' if 'GA' in algo_name else 'Iteration', fontweight='bold')
+    ax.set_ylabel('Distance', fontweight='bold')
+    ax.set_title(title, fontweight='bold', fontsize=14)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    st.pyplot(fig)
+    
+    # Route details
+    st.markdown("### 🛣️ Detailed Routes")
+    
+    total_load = 0
+    for i, route in enumerate(best_routes):
+        customers = [c for c in route if c != 0]
+        route_load = sum(demands[c] for c in customers)
+        total_load += route_load
+        
+        route_distance = 0
+        for j in range(len(route) - 1):
+            route_distance += dist_matrix[route[j], route[j+1]]
+        
+        with st.expander(f"Route {i+1} (Load: {route_load}/{vehicle_capacity}, Distance: {route_distance:.2f})"):
+            st.write(f"**Path:** {' → '.join(map(str, route))}")
+            st.write(f"**Customers:** {customers}")
+            st.write(f"**Load:** {route_load} / {vehicle_capacity}")
+            st.write(f"**Distance:** {route_distance:.2f}")
+    
+    st.metric("Total Load", f"{total_load}")
+    
+    # Export results
+    st.markdown("### 💾 Export Results")
+    
+    routes_df = pd.DataFrame({
+        'Route_ID': range(1, len(best_routes) + 1),
+        'Path': [str(r) for r in best_routes],
+        'Distance': [sum(dist_matrix[best_routes[i][j], best_routes[i][j+1]] 
+                        for j in range(len(best_routes[i])-1)) 
+                    for i in range(len(best_routes))]
+    })
+    
+    csv = routes_df.to_csv(index=False)
+    st.download_button(
+        label=f"📥 Download {algo_name} Routes (CSV)",
+        data=csv,
+        file_name=f"cvrp_routes_{algo_name.lower().replace(' ', '_')}.csv",
+        mime="text/csv"
+    )
+
+
+# ============================================================================
 # STREAMLIT APP
 # ============================================================================
 
@@ -434,7 +544,7 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 📊 Problem Instance")
-    problem_sheet = st.selectbox("Select Problem", ["Problem 7", "Problem 8", "Problem 9"])
+    problem_sheet = st.selectbox("Select Problem", ["Problem 7", "Problem 8", "Problem 10"])
 
 # Main content
 col1, col2 = st.columns([2, 1])
@@ -458,98 +568,124 @@ with col1:
         with metric_col4:
             st.metric("Distance Unit", "Euclidean")
         
-        # Run optimization
-        if st.button("🚀 Run Optimization", use_container_width=True):
-            st.info("⏳ Running hybrid GA + TS optimization...")
-            progress_bar = st.progress(0)
-            
-            hybrid = HybridGATS(
-                dist=dist_matrix,
-                demands=demands,
-                capacity=vehicle_capacity,
-                num_customers=len(coords)
-            )
-            
-            best_routes, best_distance, history = hybrid.run(
-                ga_pop_size=ga_pop_size,
-                ga_generations=ga_generations,
-                ts_iterations=ts_iterations,
-                crossover_rate=crossover_rate,
-                mutation_rate=mutation_rate,
-                elite_size=2,
-                progress_bar=progress_bar
-            )
-            
-            st.success("✅ Optimization complete!")
-            
-            # Display results
-            st.markdown("### 📈 Results")
-            
-            result_col1, result_col2, result_col3 = st.columns(3)
-            with result_col1:
-                st.metric("Best Distance", f"{best_distance:.2f}")
-            with result_col2:
-                st.metric("Number of Routes", len(best_routes))
-            with result_col3:
-                improvement = ((history['overall_best'][0] - best_distance) / history['overall_best'][0]) * 100
-                st.metric("Improvement", f"{improvement:.1f}%")
-            
-            # Convergence plot
-            st.markdown("### 📊 Convergence Analysis")
-            
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(history['gen'], history['ga_best'], marker='o', label='GA Best', linewidth=2)
-            ax.plot(history['gen'], history['ts_best'], marker='s', label='TS Refined', linewidth=2)
-            ax.plot(history['gen'], history['overall_best'], marker='^', label='Overall Best', 
-                   linewidth=2.5, color='red')
-            ax.set_xlabel('Generation', fontweight='bold')
-            ax.set_ylabel('Distance', fontweight='bold')
-            ax.set_title('Hybrid GA + TS Convergence', fontweight='bold', fontsize=14)
-            ax.legend(fontsize=10)
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            
-            st.pyplot(fig)
-            
-            # Route details
-            st.markdown("### 🛣️ Detailed Routes")
-            
-            total_load = 0
-            for i, route in enumerate(best_routes):
-                customers = [c for c in route if c != 0]
-                route_load = sum(demands[c] for c in customers)
-                total_load += route_load
+        # Algorithm selection tabs
+        algo_tab1, algo_tab2, algo_tab3 = st.tabs(["🔬 Hybrid GA+TS", "🧬 GA Only", "🔍 TS Only"])
+        
+        with algo_tab1:
+            st.markdown("#### Hybrid Genetic Algorithm + Tabu Search")
+            if st.button("🚀 Run Hybrid GA+TS", use_container_width=True, key="hybrid"):
+                st.info("⏳ Running hybrid GA + TS optimization...")
+                progress_bar = st.progress(0)
                 
-                route_distance = 0
-                for j in range(len(route) - 1):
-                    route_distance += dist_matrix[route[j], route[j+1]]
+                hybrid = HybridGATS(
+                    dist=dist_matrix,
+                    demands=demands,
+                    capacity=vehicle_capacity,
+                    num_customers=len(coords)
+                )
                 
-                with st.expander(f"Route {i+1} (Load: {route_load}/{vehicle_capacity}, Distance: {route_distance:.2f})"):
-                    st.write(f"**Path:** {' → '.join(map(str, route))}")
-                    st.write(f"**Customers:** {customers}")
-                    st.write(f"**Load:** {route_load} / {vehicle_capacity}")
-                    st.write(f"**Distance:** {route_distance:.2f}")
+                best_routes, best_distance, history = hybrid.run(
+                    ga_pop_size=ga_pop_size,
+                    ga_generations=ga_generations,
+                    ts_iterations=ts_iterations,
+                    crossover_rate=crossover_rate,
+                    mutation_rate=mutation_rate,
+                    elite_size=2,
+                    progress_bar=progress_bar
+                )
+                
+                st.success("✅ Hybrid optimization complete!")
+                display_results(best_routes, best_distance, history, dist_matrix, demands, 
+                              vehicle_capacity, "Hybrid GA+TS", show_hybrid_plot=True)
+        
+        with algo_tab2:
+            st.markdown("#### Genetic Algorithm (Standalone)")
+            if st.button("🧬 Run GA Only", use_container_width=True, key="ga_only"):
+                st.info("⏳ Running Genetic Algorithm...")
+                progress_bar = st.progress(0)
+                
+                ga = GeneticAlgorithm(
+                    dist=dist_matrix,
+                    demands=demands,
+                    capacity=vehicle_capacity,
+                    num_customers=len(coords)
+                )
+                
+                best_individual, fitness_history = ga.evolve(
+                    pop_size=ga_pop_size,
+                    generations=ga_generations,
+                    crossover_rate=crossover_rate,
+                    mutation_rate=mutation_rate,
+                    elite_size=2
+                )
+                
+                best_routes = ga.get_best_routes()
+                best_distance = ga.best_fitness
+                
+                # Create history for display
+                history = {
+                    'gen': list(range(1, len(fitness_history) + 1)),
+                    'ga_best': fitness_history,
+                    'ts_best': fitness_history,
+                    'overall_best': fitness_history
+                }
+                
+                progress_bar.progress(1.0)
+                st.success("✅ GA optimization complete!")
+                display_results(best_routes, best_distance, history, dist_matrix, demands, 
+                              vehicle_capacity, "GA Only", show_hybrid_plot=False)
+        
+        with algo_tab3:
+            st.markdown("#### Tabu Search (Standalone)")
+            st.info("💡 TS requires an initial solution. Using random initial routes.")
             
-            st.metric("Total Load", f"{total_load}")
-            
-            # Export results
-            st.markdown("### 💾 Export Results")
-            
-            routes_df = pd.DataFrame({
-                'Route_ID': range(1, len(best_routes) + 1),
-                'Path': [str(r) for r in best_routes],
-                'Distance': [sum(dist_matrix[best_routes[i][j], best_routes[i][j+1]] 
-                                for j in range(len(best_routes[i])-1)) 
-                            for i in range(len(best_routes))]
-            })
-            
-            csv = routes_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Routes (CSV)",
-                data=csv,
-                file_name="cvrp_routes.csv",
-                mime="text/csv"
-            )
+            if st.button("🔍 Run TS Only", use_container_width=True, key="ts_only"):
+                st.info("⏳ Running Tabu Search...")
+                progress_bar = st.progress(0)
+                
+                # Generate initial random solution
+                ga_init = GeneticAlgorithm(
+                    dist=dist_matrix,
+                    demands=demands,
+                    capacity=vehicle_capacity,
+                    num_customers=len(coords)
+                )
+                ga_init.initialize_population(1)
+                ga_init.evaluate_population()
+                initial_routes = ga_init.get_best_routes()
+                initial_distance = ga_init.best_fitness
+                
+                progress_bar.progress(0.2)
+                
+                # Run TS
+                ts = TabuSearch(
+                    dist=dist_matrix,
+                    demands=demands,
+                    capacity=vehicle_capacity
+                )
+                
+                # Track TS iterations
+                ts_history = [initial_distance]
+                best_routes = initial_routes
+                best_distance = initial_distance
+                
+                for i in range(ts_iterations):
+                    best_routes, best_distance = ts.refine_solution(best_routes, iterations=1)
+                    ts_history.append(best_distance)
+                    progress_bar.progress(0.2 + 0.8 * (i + 1) / ts_iterations)
+                
+                # Create history for display
+                history = {
+                    'gen': list(range(len(ts_history))),
+                    'ga_best': ts_history,
+                    'ts_best': ts_history,
+                    'overall_best': ts_history
+                }
+                
+                st.success("✅ TS optimization complete!")
+                st.info(f"Initial distance: {initial_distance:.2f} → Final: {best_distance:.2f}")
+                display_results(best_routes, best_distance, history, dist_matrix, demands, 
+                              vehicle_capacity, "TS Only", show_hybrid_plot=False)
     
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
